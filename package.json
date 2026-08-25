@@ -37,5 +37,9 @@
     "typescript": "~6.0.3",
     "vitest": "^3.2.4"
   },
-  "private": true
+  "private": true,
+  "overrides": {
+    "react-native-worklets": "0.10.1",
+    "react-native-reanimated": "4.5.1"
+  }
 }

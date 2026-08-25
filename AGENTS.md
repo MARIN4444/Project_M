@@ -62,3 +62,24 @@ migración es **añadir** una entrada a `MIGRATIONS` en `src/db/migrations.ts`;
 nunca editar una anterior. No hay drizzle-kit en el build a propósito: las
 migraciones generadas exigirían un transformador de Metro para empaquetar
 ficheros `.sql`, que son demasiadas piezas móviles para esta cantidad de tablas.
+
+## Versiones nativas ancladas
+
+`package.json` fija `react-native-worklets` y `react-native-reanimated` con
+`overrides`. No los quites ni los subas por tu cuenta.
+
+Ninguno de los dos es dependencia directa: entran por `expo-router` y
+`@expo/ui`, y npm resolvía versiones más nuevas que las que trae el SDK.
+`expo-modules-core` compila C++ contra la API de worklets, así que una versión
+de más rompe el build de Android con un error de compilador, no de JavaScript
+—y por tanto no lo cazan ni `tsc` ni los tests ni el bundle de Metro. La que
+nos costó una tarde fue `no member named 'executeSync' in
+'worklets::WorkletRuntime'`.
+
+Los valores correctos son siempre los de
+`node_modules/expo/bundledNativeModules.json`, que es la lista de versiones
+contra las que Expo ha probado el SDK. Al subir de SDK, actualiza los
+`overrides` a lo que diga ese fichero.
+
+`npm ls react-native-worklets` los delata: si dice `invalid`, el build de
+Android va a fallar aunque todo lo demás esté en verde.
