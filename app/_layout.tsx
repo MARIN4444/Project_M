@@ -1,12 +1,18 @@
+import * as Crypto from 'expo-crypto';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { setRandomBytesSource } from '@/core/ids';
 import { runMigrations } from '@/db/client';
 import { Body, Caption, Loading, Screen } from '@/ui/components';
 import { spacing, useTheme } from '@/ui/theme';
+
+// Ids are the tiebreaker when two devices write the same slot in the same
+// millisecond, so they need real randomness rather than Math.random.
+setRandomBytesSource((size) => Crypto.getRandomBytes(size));
 
 type Startup =
   | { readonly kind: 'loading' }

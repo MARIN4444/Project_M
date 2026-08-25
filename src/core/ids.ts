@@ -16,7 +16,24 @@ const RANDOM_LEN = 16;
 export type RandomBytes = (size: number) => Uint8Array;
 export type Clock = () => number;
 
+let installedSource: RandomBytes | undefined;
+
+/**
+ * Installs the platform's cryptographic randomness.
+ *
+ * React Native ships no global `crypto`, so without this the generator falls
+ * back to `Math.random`, which is not collision-resistant enough to be the
+ * tiebreaker two devices rely on. The app calls this once at startup with
+ * expo-crypto; keeping it an injection is what lets this module stay free of
+ * any React Native or expo import.
+ */
+export function setRandomBytesSource(source: RandomBytes): void {
+  installedSource = source;
+}
+
 function defaultRandomBytes(size: number): Uint8Array {
+  if (installedSource !== undefined) return installedSource(size);
+
   const buffer = new Uint8Array(size);
   const webCrypto = globalThis.crypto;
   if (webCrypto && typeof webCrypto.getRandomValues === 'function') {

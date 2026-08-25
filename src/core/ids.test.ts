@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createIdFactory, newJoinCode } from './ids';
+import { createIdFactory, newJoinCode, setRandomBytesSource } from './ids';
 
 /** Deterministic byte source: fills every byte with the same value. */
 function fixedBytes(value: number) {
@@ -61,6 +61,35 @@ describe('createIdFactory', () => {
     const ids = new Set(Array.from({ length: 1_000 }, () => newId()));
 
     expect(ids.size).toBe(1_000);
+  });
+});
+
+describe('setRandomBytesSource', () => {
+  it('routes the default generator through the installed source', () => {
+    const sizes: number[] = [];
+    setRandomBytesSource((size) => {
+      sizes.push(size);
+      return new Uint8Array(size).fill(3);
+    });
+
+    try {
+      const newId = createIdFactory();
+      const first = newId();
+      const second = newId();
+
+      expect(sizes.length).toBeGreaterThan(0);
+      // A fixed source still yields distinct ids, because the generator
+      // increments within a millisecond instead of re-rolling.
+      expect(first).not.toBe(second);
+      expect(second > first).toBe(true);
+    } finally {
+      // Restore real randomness for the rest of the suite.
+      setRandomBytesSource((size) => {
+        const buffer = new Uint8Array(size);
+        for (let i = 0; i < size; i += 1) buffer[i] = Math.floor(Math.random() * 256);
+        return buffer;
+      });
+    }
   });
 });
 
