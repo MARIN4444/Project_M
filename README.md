@@ -23,9 +23,27 @@ preparado para ella.
 
 ```bash
 npm install
-npm start          # abre Expo; escanea el QR con Expo Go
-npm run android    # o ios
+npm start          # abre el servidor y muestra el QR
 ```
+
+Para abrirlo en el móvil hace falta una app contenedora. Hay dos caminos:
+
+**Development build (recomendado).** Compilas tu propia app con este SDK y
+estas librerías, así que no dependes de que Expo publique nada:
+
+```bash
+npx eas login                                          # cuenta gratuita de Expo
+npx eas build --profile development --platform android
+```
+
+Al terminar te da un enlace con un QR: lo escaneas desde el móvil, instalas el
+APK y ya tienes tu app. A partir de ahí, `npm start` y abrirla; el código se
+recarga solo. Solo hay que repetir el build al añadir una librería nativa.
+
+**Expo Go.** Más rápido para una primera prueba, pero solo soporta un SDK a la
+vez, así que si va por detrás de este proyecto no abrirá. En ese caso, el
+build de Expo Go para el SDK de este proyecto está en
+`https://expo.dev/go?sdkVersion=57&platform=android&device=true`.
 
 ## Verificar
 
