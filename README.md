@@ -32,9 +32,13 @@ Para abrirlo en el móvil hace falta una app contenedora. Hay dos caminos:
 estas librerías, así que no dependes de que Expo publique nada:
 
 ```bash
-npx eas login                                          # cuenta gratuita de Expo
-npx eas build --profile development --platform android
+npm install -g eas-cli                             # el paquete es eas-cli, el comando es eas
+eas login                                          # cuenta gratuita de Expo
+eas build --profile development --platform android
 ```
+
+Sin instalación global, el equivalente es `npx eas-cli@latest <comando>`;
+`npx eas` no funciona, porque npx busca un paquete llamado `eas` que no existe.
 
 Al terminar te da un enlace con un QR: lo escaneas desde el móvil, instalas el
 APK y ya tienes tu app. A partir de ahí, `npm start` y abrirla; el código se
