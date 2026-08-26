@@ -4,6 +4,8 @@ import { openDatabaseSync, type SQLiteDatabase } from 'expo-sqlite';
 import { LATEST_VERSION, pendingMigrations } from './migrations';
 import * as schema from './schema';
 
+// Never rename this: the file name is invisible to the user, and changing it
+// would orphan the database already on every installed phone.
 const DATABASE_NAME = 'mesa.db';
 
 let handle: SQLiteDatabase | undefined;

@@ -70,7 +70,7 @@ export default function RootLayout() {
             contentStyle: { backgroundColor: theme.background },
           }}
         >
-          <Stack.Screen name="index" options={{ title: 'Mesa' }} />
+          <Stack.Screen name="index" options={{ title: 'Project_M' }} />
           <Stack.Screen name="match/new" options={{ title: 'Nueva partida' }} />
           <Stack.Screen name="match/[id]" options={{ title: 'Partida' }} />
         </Stack>

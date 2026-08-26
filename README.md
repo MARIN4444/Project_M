@@ -1,4 +1,4 @@
-# Mesa
+# Project_M
 
 App móvil para noches de juegos de mesa. Lleva la puntuación mientras jugáis,
 en un solo móvil o con uno por persona.
