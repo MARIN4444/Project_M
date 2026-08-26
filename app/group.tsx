@@ -6,7 +6,7 @@ import { liveQueries, setActiveGroupId } from '@/db/repository';
 import type { GroupRow, MetaRow, OutboxRow } from '@/db/schema';
 import { syncNow } from '@/sync/engine';
 import { createGroup, joinGroup } from '@/sync/groups';
-import { isSyncConfigured } from '@/sync/supabase';
+import { syncUnavailableReason } from '@/sync/supabase';
 import { Button, Caption, Card, Field, Heading, Screen, Title } from '@/ui/components';
 import { radius, spacing, useTheme } from '@/ui/theme';
 
@@ -60,15 +60,14 @@ export default function GroupScreen() {
       setStatus(describe(result.pushed, result.pulled, result.error));
     });
 
-  if (!isSyncConfigured()) {
+  const unavailable = syncUnavailableReason();
+  if (unavailable !== undefined) {
     return (
       <Screen>
         <View style={styles.notice}>
           <Heading>Sin sincronización</Heading>
-          <Caption>
-            Esta versión se compiló sin credenciales de servidor. La app funciona igual, pero
-            las partidas se quedan en este dispositivo.
-          </Caption>
+          <Caption>{unavailable}</Caption>
+          <Caption>Mientras tanto la app funciona igual, pero solo en este dispositivo.</Caption>
         </View>
       </Screen>
     );

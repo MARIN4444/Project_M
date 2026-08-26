@@ -3,7 +3,7 @@ import { adoptUngroupedInto, listGroups, saveGroup, setActiveGroupId } from '@/d
 import type { GroupRow } from '@/db/schema';
 
 import { ensureSession } from './session';
-import { getSupabase, isSyncConfigured } from './supabase';
+import { getSupabase, syncUnavailableReason } from './supabase';
 
 /**
  * Creating and joining the group you play with.
@@ -37,12 +37,12 @@ export async function createGroup(name: string): Promise<GroupSummary> {
   const trimmed = name.trim();
   if (trimmed === '') throw new Error('El grupo necesita un nombre.');
 
-  if (!isSyncConfigured()) {
-    throw new Error('Esta versión de la app se compiló sin sincronización.');
-  }
+  const unavailable = syncUnavailableReason();
+  if (unavailable !== undefined) throw new Error(unavailable);
 
+  const supabase = getSupabase();
   const userId = await ensureSession();
-  if (userId === undefined) {
+  if (supabase === undefined || userId === undefined) {
     throw new Error('No hay conexión para crear el grupo. Inténtalo más tarde.');
   }
 
@@ -54,7 +54,7 @@ export async function createGroup(name: string): Promise<GroupSummary> {
     syncedAt: null,
   };
 
-  const { error } = await getSupabase().rpc('create_group', {
+  const { error } = await supabase.rpc('create_group', {
     group_id: row.id,
     group_name: row.name,
     code: row.joinCode,
@@ -75,16 +75,14 @@ export async function joinGroup(code: string): Promise<GroupSummary> {
   const trimmed = code.trim().toUpperCase();
   if (trimmed === '') throw new Error('Escribe el código del grupo.');
 
-  if (!isSyncConfigured()) {
-    throw new Error('Esta versión de la app se compiló sin sincronización.');
-  }
-
-  const userId = await ensureSession();
-  if (userId === undefined) {
-    throw new Error('Hace falta conexión para unirse a un grupo.');
-  }
+  const unavailable = syncUnavailableReason();
+  if (unavailable !== undefined) throw new Error(unavailable);
 
   const supabase = getSupabase();
+  const userId = await ensureSession();
+  if (supabase === undefined || userId === undefined) {
+    throw new Error('Hace falta conexión para unirse a un grupo.');
+  }
 
   const { data: groupId, error } = await supabase.rpc('join_group', { code: trimmed });
   if (error !== null) {

@@ -31,6 +31,7 @@ export async function ensureSession(): Promise<string | undefined> {
 
   inFlight = (async () => {
     const supabase = getSupabase();
+    if (supabase === undefined) return undefined;
 
     const { data: existing } = await supabase.auth.getSession();
     if (existing.session !== null) return existing.session.user.id;
@@ -52,7 +53,8 @@ export async function ensureSession(): Promise<string | undefined> {
 }
 
 export async function currentUserId(): Promise<string | undefined> {
-  if (!isSyncConfigured()) return undefined;
-  const { data } = await getSupabase().auth.getSession();
+  const supabase = getSupabase();
+  if (supabase === undefined) return undefined;
+  const { data } = await supabase.auth.getSession();
   return data.session?.user.id;
 }

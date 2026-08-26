@@ -84,9 +84,8 @@ export interface SyncResult {
  * Sends everything queued locally. Rows are pushed in dependency order, since
  * a seat whose match has not arrived yet would be rejected by the foreign key.
  */
-async function push(groupId: string): Promise<number> {
+async function push(groupId: string, supabase: NonNullable<ReturnType<typeof getSupabase>>): Promise<number> {
   const db = getDb();
-  const supabase = getSupabase();
   const queued = await pendingOutbox(500);
   if (queued.length === 0) return 0;
 
@@ -189,9 +188,8 @@ async function push(groupId: string): Promise<number> {
 
 const PAGE = 1000;
 
-async function pull(groupId: string): Promise<number> {
+async function pull(groupId: string, supabase: NonNullable<ReturnType<typeof getSupabase>>): Promise<number> {
   const db = getDb();
-  const supabase = getSupabase();
   let received = 0;
 
   const fetchSince = async (table: Syncable) => {
@@ -269,15 +267,16 @@ export async function syncNow(): Promise<SyncResult> {
   const groupId = await getActiveGroupId();
   if (groupId === undefined) return { pushed: 0, pulled: 0 };
 
+  const supabase = getSupabase();
   const userId = await ensureSession();
-  if (userId === undefined) {
+  if (supabase === undefined || userId === undefined) {
     return { pushed: 0, pulled: 0, error: 'Sin conexión' };
   }
 
   running = true;
   try {
-    const pushed = await push(groupId);
-    const pulled = await pull(groupId);
+    const pushed = await push(groupId, supabase);
+    const pulled = await pull(groupId, supabase);
     return { pushed, pulled };
   } catch (error: unknown) {
     return {
@@ -300,9 +299,9 @@ export async function syncNow(): Promise<SyncResult> {
  * queries over that database, so they redraw without knowing sync exists.
  */
 export function watchMatch(matchId: string, onChange?: () => void): () => void {
-  if (!isSyncConfigured()) return () => {};
-
   const supabase = getSupabase();
+  if (supabase === undefined) return () => {};
+
   const channel = supabase
     .channel(`match:${matchId}`)
     .on(

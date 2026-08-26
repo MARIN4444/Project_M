@@ -1,17 +1,17 @@
-import 'react-native-url-polyfill/auto';
-
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { AppState } from 'react-native';
 
 /**
- * The Supabase client, created lazily and only if the app was built with
- * credentials.
+ * The Supabase client, created lazily and only if everything it needs is
+ * actually present.
  *
- * Sync is optional by design. Without these variables the app is exactly what
- * it was before: a scorer with a local database. Nothing above this module may
- * assume a server exists -- that is the same rule the outbox enforces, applied
- * one layer up.
+ * Sync is optional, and that has to be true at load time and not just in
+ * spirit. Session storage is a native module, so importing it at the top of
+ * this file would put it on the boot path: an app running against a build that
+ * predates it would die before drawing a single pixel, which is exactly the
+ * blank screen that led to this shape. Everything native is therefore reached
+ * through a guarded lazy require, and a failure disables sync instead of
+ * taking the app with it.
  *
  * The key that ships here is the publishable one and is meant to be public.
  * What keeps one group's matches away from another is row level security in
@@ -21,26 +21,80 @@ import { AppState } from 'react-native';
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-export function isSyncConfigured(): boolean {
+interface NativeDeps {
+  readonly storage: unknown;
+}
+
+type DepsState = { loaded: true; deps: NativeDeps } | { loaded: false };
+
+let depsState: DepsState | undefined;
+
+/**
+ * Pulls in the pieces that only exist in a build compiled with them. Anything
+ * missing is reported, never thrown: a phone running an older build should
+ * lose sync, not the app.
+ */
+function loadNativeDeps(): DepsState {
+  if (depsState !== undefined) return depsState;
+
+  try {
+    // React Native's URL is incomplete; supabase-js needs the full one.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require('react-native-url-polyfill/auto');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const module = require('@react-native-async-storage/async-storage') as {
+      default?: unknown;
+    };
+    const storage = module.default;
+    depsState = storage === undefined ? { loaded: false } : { loaded: true, deps: { storage } };
+  } catch {
+    depsState = { loaded: false };
+  }
+
+  return depsState;
+}
+
+function hasCredentials(): boolean {
   return (
     typeof url === 'string' && url.length > 0 && typeof anonKey === 'string' && anonKey.length > 0
   );
 }
 
+/**
+ * Whether this build can sync at all: it needs both credentials and the native
+ * modules the client depends on.
+ */
+export function isSyncConfigured(): boolean {
+  return hasCredentials() && loadNativeDeps().loaded;
+}
+
+/** Why sync is unavailable, for a screen that wants to say something useful. */
+export function syncUnavailableReason(): string | undefined {
+  if (!hasCredentials()) {
+    return 'Esta versión se compiló sin credenciales de servidor.';
+  }
+  if (!loadNativeDeps().loaded) {
+    return 'Esta app está instalada desde una versión anterior a la sincronización. Vuelve a instalar la última.';
+  }
+  return undefined;
+}
+
 let client: SupabaseClient | undefined;
 let refreshWired = false;
 
-export function getSupabase(): SupabaseClient {
-  if (!isSyncConfigured()) {
-    throw new Error('Sync is not configured: EXPO_PUBLIC_SUPABASE_* are missing.');
-  }
+/** The client, or undefined when this build cannot sync. Never throws. */
+export function getSupabase(): SupabaseClient | undefined {
+  if (!isSyncConfigured()) return undefined;
 
   if (client === undefined) {
+    const state = loadNativeDeps();
+    if (!state.loaded) return undefined;
+
     client = createClient(url as string, anonKey as string, {
       auth: {
         // The session has to outlive the process, or every launch would create
         // a new anonymous user and the phone would lose its group.
-        storage: AsyncStorage,
+        storage: state.deps.storage as never,
         persistSession: true,
         autoRefreshToken: true,
         // Only meaningful on the web, where Supabase reads the callback out of
