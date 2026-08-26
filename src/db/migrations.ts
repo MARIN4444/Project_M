@@ -79,6 +79,28 @@ export const MIGRATIONS: readonly Migration[] = [
       `CREATE INDEX IF NOT EXISTS outbox_pending_idx ON outbox (sent_at, created_at)`,
     ],
   },
+  {
+    version: 2,
+    statements: [
+      // A group is "the people I play with". Matches that belong to one are
+      // shared with its members; matches with no group stay on this device.
+      `CREATE TABLE IF NOT EXISTS groups (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        join_code TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        synced_at INTEGER
+      )`,
+      // Nullable on purpose: everything recorded before there was a group
+      // keeps working, and nothing is uploaded behind the player's back.
+      `ALTER TABLE players ADD COLUMN group_id TEXT`,
+      `ALTER TABLE matches ADD COLUMN group_id TEXT`,
+      `ALTER TABLE seats ADD COLUMN group_id TEXT`,
+      `ALTER TABLE score_entries ADD COLUMN group_id TEXT`,
+      `CREATE INDEX IF NOT EXISTS matches_group_idx ON matches (group_id, started_at)`,
+      `CREATE INDEX IF NOT EXISTS score_entries_group_idx ON score_entries (group_id)`,
+    ],
+  },
 ];
 
 export const LATEST_VERSION = MIGRATIONS.reduce(

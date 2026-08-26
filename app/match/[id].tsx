@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { Stack, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import type { Seat } from '@/core/match';
@@ -26,6 +26,7 @@ import {
   undoScore,
 } from '@/db/repository';
 import type { MatchRow, ScoreEntryRow, SeatRow } from '@/db/schema';
+import { watchMatch } from '@/sync/engine';
 import { catalog } from '@/templates/catalog';
 import {
   Body,
@@ -50,6 +51,11 @@ export default function MatchScreen() {
   const entriesQuery = useLiveQuery(liveQueries.entries(matchId), [matchId]);
 
   const [expandedSeatId, setExpandedSeatId] = useState<string | undefined>(undefined);
+
+  // While this match is open, entries written on someone else's phone land in
+  // our SQLite. The live queries above are watching that database, so the
+  // table redraws without this screen knowing sync exists.
+  useEffect(() => watchMatch(matchId), [matchId]);
 
   const matchRow = (matchQuery.data as MatchRow[])[0];
   const seats = useMemo(

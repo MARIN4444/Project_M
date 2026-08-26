@@ -5,11 +5,21 @@ export const meta = sqliteTable('meta', {
   value: text('value').notNull(),
 });
 
+export const groups = sqliteTable('groups', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  joinCode: text('join_code').notNull(),
+  createdAt: integer('created_at').notNull(),
+  /** Null until the group has been pushed to the server. */
+  syncedAt: integer('synced_at'),
+});
+
 export const players = sqliteTable('players', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   color: text('color'),
   createdAt: integer('created_at').notNull(),
+  groupId: text('group_id'),
 });
 
 export const matches = sqliteTable(
@@ -25,6 +35,7 @@ export const matches = sqliteTable(
     startedAt: integer('started_at').notNull(),
     finishedAt: integer('finished_at'),
     notes: text('notes'),
+    groupId: text('group_id'),
   },
   (table) => [
     index('matches_status_started_idx').on(table.status, table.startedAt),
@@ -44,6 +55,7 @@ export const seats = sqliteTable(
     order: integer('seat_order').notNull(),
     color: text('color'),
     claimedBy: text('claimed_by'),
+    groupId: text('group_id'),
   },
   (table) => [
     index('seats_match_idx').on(table.matchId, table.order),
@@ -69,6 +81,7 @@ export const scoreEntries = sqliteTable(
     value: integer('value').notNull(),
     recordedAt: integer('recorded_at').notNull(),
     deviceId: text('device_id').notNull(),
+    groupId: text('group_id'),
   },
   (table) => [
     index('score_entries_match_idx').on(table.matchId),
@@ -101,6 +114,7 @@ export const outbox = sqliteTable(
   (table) => [index('outbox_pending_idx').on(table.sentAt, table.createdAt)],
 );
 
+export type GroupRow = typeof groups.$inferSelect;
 export type MetaRow = typeof meta.$inferSelect;
 export type PlayerRow = typeof players.$inferSelect;
 export type MatchRow = typeof matches.$inferSelect;

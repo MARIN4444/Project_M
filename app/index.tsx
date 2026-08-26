@@ -3,7 +3,7 @@ import { Link, useRouter } from 'expo-router';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 
 import { liveQueries, toMatch } from '@/db/repository';
-import type { MatchRow } from '@/db/schema';
+import type { MatchRow, MetaRow } from '@/db/schema';
 import { Body, Button, Caption, EmptyState, Heading, Screen } from '@/ui/components';
 import { radius, spacing, useTheme } from '@/ui/theme';
 
@@ -11,6 +11,8 @@ export default function HomeScreen() {
   const router = useRouter();
   const theme = useTheme();
   const { data } = useLiveQuery(liveQueries.recentMatches());
+  const hasGroup =
+    ((useLiveQuery(liveQueries.activeGroup()).data as MetaRow[]) ?? []).length > 0;
 
   const matches = (data as MatchRow[]).map(toMatch);
   const live = matches.filter((match) => match.status !== 'finished');
@@ -28,6 +30,11 @@ export default function HomeScreen() {
         ListHeaderComponent={
           <View style={styles.header}>
             <Button label="Nueva partida" onPress={() => router.push('/match/new')} />
+            <Button
+              label={hasGroup ? 'Tu grupo' : 'Jugar con tus amigos'}
+              onPress={() => router.push('/group')}
+              variant="secondary"
+            />
             {live.length > 0 && (
               <View style={styles.section}>
                 <Caption style={styles.sectionTitle}>EN CURSO</Caption>
@@ -48,7 +55,9 @@ export default function HomeScreen() {
       />
       <View style={[styles.footer, { borderTopColor: theme.border }]}>
         <Caption>
-          Todo se guarda en este dispositivo. La sincronización entre móviles llega después.
+          {hasGroup
+            ? 'Las partidas se sincronizan con tu grupo cuando hay conexión.'
+            : 'Todo se guarda en este dispositivo. Crea un grupo para compartirlo.'}
         </Caption>
       </View>
     </Screen>

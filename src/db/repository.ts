@@ -19,12 +19,14 @@ import { clampToCategory, type ScoreCategory, type ScoreTemplate } from '@/core/
 
 import { getDb, getSqliteHandle } from './client';
 import {
+  groups,
   matches,
   meta,
   outbox,
   players,
   scoreEntries,
   seats,
+  type GroupRow,
   type MatchRow,
   type PlayerRow,
   type ScoreEntryRow,
@@ -154,6 +156,84 @@ export async function markOutboxSent(ids: readonly string[]): Promise<void> {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Groups                                                                      */
+/* -------------------------------------------------------------------------- */
+
+const ACTIVE_GROUP_KEY = 'active-group';
+
+async function readMeta(key: string): Promise<string | undefined> {
+  const rows = await getDb().select().from(meta).where(eq(meta.key, key)).limit(1);
+  return rows[0]?.value;
+}
+
+async function writeMeta(key: string, value: string): Promise<void> {
+  const db = getDb();
+  const existing = await readMeta(key);
+  if (existing === undefined) {
+    await db.insert(meta).values({ key, value });
+  } else {
+    await db.update(meta).set({ value }).where(eq(meta.key, key));
+  }
+}
+
+/**
+ * The group new matches are filed under. Undefined means this device is not
+ * part of any group yet, and everything it records stays on it.
+ */
+export async function getActiveGroupId(): Promise<string | undefined> {
+  return readMeta(ACTIVE_GROUP_KEY);
+}
+
+export async function setActiveGroupId(groupId: string): Promise<void> {
+  await writeMeta(ACTIVE_GROUP_KEY, groupId);
+}
+
+export async function listGroups(): Promise<GroupRow[]> {
+  return getDb().select().from(groups).orderBy(asc(groups.createdAt));
+}
+
+export async function getGroup(id: string): Promise<GroupRow | undefined> {
+  const rows = await getDb().select().from(groups).where(eq(groups.id, id)).limit(1);
+  return rows[0];
+}
+
+/** Records a group locally. The server copy is created by the sync layer. */
+export async function saveGroup(row: GroupRow): Promise<void> {
+  const existing = await getGroup(row.id);
+  if (existing === undefined) {
+    await getDb().insert(groups).values(row);
+  } else {
+    await getDb().update(groups).set(row).where(eq(groups.id, row.id));
+  }
+}
+
+/**
+ * Files everything recorded before there was a group under one.
+ *
+ * Only ever called for the first group a person creates themselves: the
+ * history is already theirs, so bringing it along is what they expect. Joining
+ * somebody else's group deliberately does not do this -- nobody wants their
+ * private history uploaded because they scanned a friend's code.
+ */
+export async function adoptUngroupedInto(groupId: string): Promise<number> {
+  const db = getDb();
+  const orphanMatches = await db.select().from(matches).where(isNull(matches.groupId));
+
+  await getSqliteHandle().withTransactionAsync(async () => {
+    await db.update(players).set({ groupId }).where(isNull(players.groupId));
+    await db.update(matches).set({ groupId }).where(isNull(matches.groupId));
+    await db.update(seats).set({ groupId }).where(isNull(seats.groupId));
+    await db.update(scoreEntries).set({ groupId }).where(isNull(scoreEntries.groupId));
+  });
+
+  for (const match of orphanMatches) {
+    await enqueue('match', match.id, 'upsert', { id: match.id, groupId });
+  }
+
+  return orphanMatches.length;
+}
+
+/* -------------------------------------------------------------------------- */
 /* Players                                                                     */
 /* -------------------------------------------------------------------------- */
 
@@ -171,11 +251,17 @@ export async function ensurePlayer(name: string, color?: string): Promise<Player
   const trimmed = name.trim();
   if (trimmed === '') throw new Error('A player needs a name.');
 
+  const groupId = (await getActiveGroupId()) ?? null;
   const db = getDb();
+  // Scoped to the group: two different groups may each have their own Ana.
+  // `IS NOT DISTINCT FROM` rather than `=` so the ungrouped case matches too.
   const existing = await db
     .select()
     .from(players)
-    .where(sql`lower(${players.name}) = lower(${trimmed})`)
+    .where(
+      sql`lower(${players.name}) = lower(${trimmed})
+          and ${players.groupId} is not distinct from ${groupId}`,
+    )
     .limit(1);
 
   const found = existing[0];
@@ -186,6 +272,7 @@ export async function ensurePlayer(name: string, color?: string): Promise<Player
     name: trimmed,
     color: color ?? null,
     createdAt: Date.now(),
+    groupId,
   };
   await db.insert(players).values(player);
   return toPlayer(player);
@@ -222,6 +309,7 @@ export async function createMatch(input: CreateMatchInput): Promise<Match> {
 
   const db = getDb();
   const now = Date.now();
+  const groupId = (await getActiveGroupId()) ?? null;
   const seated = await Promise.all(
     input.players.map((player) => ensurePlayer(player.name, player.color)),
   );
@@ -239,6 +327,7 @@ export async function createMatch(input: CreateMatchInput): Promise<Match> {
     startedAt: now,
     finishedAt: null,
     notes: null,
+    groupId,
   };
 
   const seatRows: SeatRow[] = seated.map((player, index) => ({
@@ -249,6 +338,7 @@ export async function createMatch(input: CreateMatchInput): Promise<Match> {
     order: index,
     color: input.players[index]?.color ?? player.color ?? null,
     claimedBy: null,
+    groupId,
   }));
 
   await getSqliteHandle().withTransactionAsync(async () => {
@@ -369,8 +459,9 @@ export async function recordScore(args: RecordScoreArgs): Promise<ScoreEntry> {
     deviceId: await getDeviceId(),
   });
 
-  await getDb().insert(scoreEntries).values(entry);
-  await enqueue('score_entry', entry.id, 'upsert', entry);
+  const groupId = (await getActiveGroupId()) ?? null;
+  await getDb().insert(scoreEntries).values({ ...entry, groupId });
+  await enqueue('score_entry', entry.id, 'upsert', { ...entry, groupId });
 
   return entry;
 }
@@ -441,6 +532,15 @@ export const liveQueries = {
     getDb().select().from(matches).orderBy(desc(matches.startedAt)).limit(limit),
 
   players: () => getDb().select().from(players).orderBy(asc(players.name)),
+
+  groups: () => getDb().select().from(groups).orderBy(asc(groups.createdAt)),
+
+  /** The active group id lives in `meta`, so watching it keeps the UI honest
+   *  when the group changes from anywhere. */
+  activeGroup: () => getDb().select().from(meta).where(eq(meta.key, ACTIVE_GROUP_KEY)).limit(1),
+
+  /** Local writes still waiting for a server. Drains visibly as sync runs. */
+  pending: () => getDb().select().from(outbox).where(isNull(outbox.sentAt)),
 };
 
 export { toEntry, toMatch, toPlayer, toSeat };

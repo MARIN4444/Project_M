@@ -2,11 +2,13 @@ import * as Crypto from 'expo-crypto';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { AppState, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { setRandomBytesSource } from '@/core/ids';
 import { runMigrations } from '@/db/client';
+import { syncNow } from '@/sync/engine';
+import { ensureSession } from '@/sync/session';
 import { Body, Caption, Loading, Screen } from '@/ui/components';
 import { spacing, useTheme } from '@/ui/theme';
 
@@ -45,6 +47,26 @@ export default function RootLayout() {
     };
   }, []);
 
+  // Sync when the app opens and every time it comes back to the foreground.
+  // Both are cheap when there is nothing queued, and neither blocks the UI:
+  // a failure just leaves the outbox where it was.
+  useEffect(() => {
+    if (startup.kind !== 'ready') return;
+
+    const attempt = () => {
+      void ensureSession().then(() => syncNow());
+    };
+
+    attempt();
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') attempt();
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [startup.kind]);
+
   return (
     <SafeAreaProvider>
       <StatusBar style={theme.isDark ? 'light' : 'dark'} />
@@ -73,6 +95,7 @@ export default function RootLayout() {
           <Stack.Screen name="index" options={{ title: 'Project_M' }} />
           <Stack.Screen name="match/new" options={{ title: 'Nueva partida' }} />
           <Stack.Screen name="match/[id]" options={{ title: 'Partida' }} />
+          <Stack.Screen name="group" options={{ title: 'Tu grupo' }} />
         </Stack>
       )}
     </SafeAreaProvider>
