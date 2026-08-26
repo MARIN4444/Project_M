@@ -26,7 +26,6 @@ import {
   undoScore,
 } from '@/db/repository';
 import type { MatchRow, ScoreEntryRow, SeatRow } from '@/db/schema';
-import { watchMatch } from '@/sync/engine';
 import { catalog } from '@/templates/catalog';
 import {
   Body,
@@ -55,7 +54,27 @@ export default function MatchScreen() {
   // While this match is open, entries written on someone else's phone land in
   // our SQLite. The live queries above are watching that database, so the
   // table redraws without this screen knowing sync exists.
-  useEffect(() => watchMatch(matchId), [matchId]);
+  //
+  // Loaded on demand for the same reason the root layout does it: a scorer
+  // that works offline must not depend on the sync client even being loadable.
+  useEffect(() => {
+    let stop: (() => void) | undefined;
+    let cancelled = false;
+
+    void import('@/sync/engine')
+      .then(({ watchMatch }) => {
+        if (cancelled) return;
+        stop = watchMatch(matchId);
+      })
+      .catch(() => {
+        // No sync in this build; scoring locally is unaffected.
+      });
+
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
+  }, [matchId]);
 
   const matchRow = (matchQuery.data as MatchRow[])[0];
   const seats = useMemo(

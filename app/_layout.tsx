@@ -7,9 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { setRandomBytesSource } from '@/core/ids';
 import { runMigrations } from '@/db/client';
-import { syncNow } from '@/sync/engine';
-import { ensureSession } from '@/sync/session';
-import { Body, Caption, Loading, Screen } from '@/ui/components';
+import { Body, Button, Caption, Loading, Screen } from '@/ui/components';
 import { spacing, useTheme } from '@/ui/theme';
 
 // Ids are the tiebreaker when two devices write the same slot in the same
@@ -53,8 +51,26 @@ export default function RootLayout() {
   useEffect(() => {
     if (startup.kind !== 'ready') return;
 
+    // Imported here rather than at the top of the file on purpose. Everything
+    // sync touches -- the Supabase client, its polyfills, session storage --
+    // would otherwise be evaluated while the module graph loads, which puts an
+    // optional feature on the boot path. When one of those pieces is missing
+    // the app dies before drawing anything, and a blank screen is the least
+    // debuggable failure there is. Loading it from inside an effect means a
+    // problem in sync can only ever break sync.
     const attempt = () => {
-      void ensureSession().then(() => syncNow());
+      void (async () => {
+        try {
+          const [{ syncNow }, { ensureSession }] = await Promise.all([
+            import('@/sync/engine'),
+            import('@/sync/session'),
+          ]);
+          await ensureSession();
+          await syncNow();
+        } catch {
+          // Sync is optional. The scorer works without it.
+        }
+      })();
     };
 
     attempt();
@@ -110,3 +126,23 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
   },
 });
+
+/**
+ * Expo Router renders this instead of the screen when something throws while
+ * rendering. Without it the app shows a blank white screen and the reason
+ * lives only in a terminal the person holding the phone cannot see.
+ */
+export function ErrorBoundary({ error, retry }: { error: Error; retry: () => Promise<void> }) {
+  return (
+    <SafeAreaProvider>
+      <Screen>
+        <View style={styles.failure}>
+          <Body>Algo se rompió al abrir esta pantalla.</Body>
+          <Caption selectable>{error.message}</Caption>
+          <Caption selectable>{error.stack?.split('\n').slice(0, 6).join('\n')}</Caption>
+          <Button label="Reintentar" onPress={() => void retry()} />
+        </View>
+      </Screen>
+    </SafeAreaProvider>
+  );
+}

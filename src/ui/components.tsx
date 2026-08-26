@@ -49,6 +49,8 @@ type TypographyProps = {
   children: ReactNode;
   style?: StyleProp<TextStyle>;
   numberOfLines?: number;
+  /** Lets an error message be copied off the phone and pasted somewhere useful. */
+  selectable?: boolean;
 };
 
 export function Title({ children, style }: TypographyProps) {
@@ -65,19 +67,27 @@ export function Heading({ children, style, numberOfLines }: TypographyProps) {
   );
 }
 
-export function Body({ children, style, numberOfLines }: TypographyProps) {
+export function Body({ children, style, numberOfLines, selectable }: TypographyProps) {
   const theme = useTheme();
   return (
-    <Text numberOfLines={numberOfLines} style={[styles.body, { color: theme.text }, style]}>
+    <Text
+      numberOfLines={numberOfLines}
+      selectable={selectable}
+      style={[styles.body, { color: theme.text }, style]}
+    >
       {children}
     </Text>
   );
 }
 
-export function Caption({ children, style, numberOfLines }: TypographyProps) {
+export function Caption({ children, style, numberOfLines, selectable }: TypographyProps) {
   const theme = useTheme();
   return (
-    <Text numberOfLines={numberOfLines} style={[styles.caption, { color: theme.textMuted }, style]}>
+    <Text
+      numberOfLines={numberOfLines}
+      selectable={selectable}
+      style={[styles.caption, { color: theme.textMuted }, style]}
+    >
       {children}
     </Text>
   );
